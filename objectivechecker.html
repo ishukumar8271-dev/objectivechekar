@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart OMR Scanner & Checker</title>
+    <style>
+        /* CSS Styles */
+        :root {
+            --primary: #2563eb;
+            --secondary: #f1f5f9;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --text: #1e293b;
+            --bg: #f8fafc;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 15px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        header {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: #e2e8f0;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-weight: 600;
+            color: #64748b;
+            transition: 0.3s;
+        }
+        .tab-btn.active {
+            background: white;
+            color: var(--primary);
+            border-top: 3px solid var(--primary);
+        }
+
+        /* Content Area */
+        .content { padding: 20px; display: none; }
+        .content.active { display: block; animation: slideUp 0.3s; }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Setup Inputs */
+        .setup-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+            background: var(--secondary);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        input[type="number"] {
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            width: 80px;
+        }
+
+        .key-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+            gap: 15px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .key-item label { display: block; font-size: 12px; margin-bottom: 4px; font-weight: bold; }
+        .key-item select {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+        }
+
+        /* Camera & Upload */
+        .camera-container {
+            text-align: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 12px;
+            background: #000;
+            display: none;
+            border: 4px solid var(--primary);
+        }
+
+        .preview-img {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 12px;
+            display: none;
+            border: 4px solid var(--success);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        /* Results */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--secondary);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-card h3 { margin: 5px 0; font-size: 24px; }
+        .stat-card.correct { border-bottom: 4px solid var(--success); }
+        .stat-card.wrong { border-bottom: 4px solid var(--danger); }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .result-table th, .result-table td {
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: center;
+        }
+        .result-table th { background: #f8fafc; }
+        
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h2>📸 Smart OMR Checker</h2>
+        <p>Set Key -> Scan via Camera -> Get Result</p>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('setup')">1. Answer Key Setup</button>
+        <button class="tab-btn" onclick="switchTab('check')">2. Scan & Check</button>
+    </div>
+
+    <!-- SETUP SECTION -->
+    <div id="setup" class="content active">
+        <div class="setup-controls">
+            <label><strong>Total Questions:</strong></label>
+            <input type="number" id="qCount" value="10" min="5" max="200">
+            <button class="btn btn-primary" onclick="generateGrid()">Set Grid</button>
+        </div>
+        
+        <p>Questions ke answers select karein:</p>
+        <div class="key-grid" id="keyContainer">
+            <!-- Grid generated via JS -->
+        </div>
+
+        <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-success" onclick="saveKey()">💾 Save Key</button>
+        </div>
+        <p id="saveMsg" style="color: green; display: none; text-align: center; margin-top: 10px;">Key Saved Successfully!</p>
+    </div>
+
+    <!-- SCANNER SECTION -->
+    <div id="check" class="content">
+        <div class="camera-container">
+            <!-- Video Feed -->
+            <video id="videoFeed" autoplay playsinline></video>
+            
+            <!-- Captured Image Preview -->
+            <img id="capturedImage" class="preview-img" alt="Captured Sheet">
+            
+            <!-- Hidden Canvas for capture processing -->
+            <canvas id="canvas" style="display:none;"></canvas>
+        </div>
+
+        <!-- Controls -->
+        <div id="cameraControls" style="text-align: center; margin-bottom: 20px;">
+            <button class="btn btn-primary" onclick="startCamera()">📷 Open Camera</button>
+            <input type="file" id="fileUpload" accept="image/*" onchange="handleFile(this)" style="display: none;">
+            <button class="btn btn-primary" onclick="document.getElementById('fileUpload').click()">📂 Upload File</button>
+        </div>
+
+        <div id="captureControls" style="text-align: center; margin-bottom: 20px; display: none;">
+            <button class="btn btn-danger" onclick="stopCamera()">❌ Close Camera</button>
+            <button class="btn btn-success" onclick="capturePhoto()">📸 Capture Photo</button>
+        </div>
+
+        <div id="processControls" style="text-align: center; margin-bottom: 20px; display: none;">
+            <button class="btn btn-primary" onclick="processResult()">🔍 Check Answers</button>
+            <button class="btn" style="background: #64748b; color: white;" onclick="resetScanner()">🔄 Reset</button>
+        </div>
+
+        <!-- Loader -->
+        <div class="loader" id="loader"></div>
+        <p id="statusText" style="text-align: center; color: #64748b; display: none;">Scanning Sheet...</p>
+
+        <!-- Results -->
+        <div id="results" style="display: none;">
+            <h3 style="text-align: center;">Result Report</h3>
+            <div class="stats-grid">
+                <div class="stat-card correct">
+                    <span>Correct</span>
+                    <h3 id="resCorrect">0</h3>
+                </div>
+                <div class="stat-card wrong">
+                    <span>Wrong</span>
+                    <h3 id="resWrong">0</h3>
+                </div>
+                <div class="stat-card">
+                    <span>Score</span>
+                    <h3 id="resScore">0/0</h3>
+                </div>
+                <div class="stat-card">
+                    <span>Percentage</span>
+                    <h3 id="resPercent">0%</h3>
+                </div>
+            </div>
+
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>Q.No</th>
+                            <th>Key</th>
+                            <th>You</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // State Variables
+    let totalQuestions = 10;
+    let answerKey = [];
+    let studentAnswers = [];
+    let videoStream = null;
+
+    // --- INIT ---
+    window.onload = function() {
+        generateGrid();
+        loadKey();
+    };
+
+    // --- TABS ---
+    function switchTab(tabId) {
+        document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        
+        document.getElementById(tabId).classList.add('active');
+        // Find button that calls this function (simple approach)
+        const btns = document.querySelectorAll('.tab-btn');
+        if(tabId === 'setup') btns[0].classList.add('active');
+        else btns[1].classList.add('active');
+    }
+
+    // --- SETUP FUNCTIONS ---
+    function generateGrid() {
+        const countInput = document.getElementById('qCount').value;
+        totalQuestions = parseInt(countInput) || 10;
+        
+        // Reset Key
+        answerKey = new Array(totalQuestions).fill('');
+        studentAnswers = new Array(totalQuestions).fill('');
+
+        const container = document.getElementById('keyContainer');
+        container.innerHTML = '';
+
+        for(let i=0; i<totalQuestions; i++) {
+            const div = document.createElement('div');
+            div.className = 'key-item';
+            div.innerHTML = `
+                <label>Q${i+1}</label>
+                <select id="k-${i}">
+                    <option value="">-</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                </select>
+            `;
+            container.appendChild(div);
+        }
+        loadKey(); // Load values if exist
+    }
+
+    function saveKey() {
+        for(let i=0; i<totalQuestions; i++) {
+            const val = document.getElementById(`k-${i}`).value;
+            answerKey[i] = val;
+        }
+        localStorage.setItem('omrKey', JSON.stringify({ count: totalQuestions, key: answerKey }));
+        
+        const msg = document.getElementById('saveMsg');
+        msg.style.display = 'block';
+        setTimeout(() => msg.style.display = 'none', 2000);
+    }
+
+    function loadKey() {
+        const data = localStorage.getItem('omrKey');
+        if(data) {
+            const parsed = JSON.parse(data);
+            // Update UI only if counts match, otherwise just keep data in memory
+            if(parsed.count === totalQuestions) {
+                answerKey = parsed.key;
+                for(let i=0; i<totalQuestions; i++) {
+                    const el = document.getElementById(`k-${i}`);
+                    if(el) el.value = answerKey[i];
+                }
+            }
+        }
+    }
+
+    // --- CAMERA FUNCTIONS ---
+    async function startCamera() {
+        try {
+            const video = document.getElementById('videoFeed');
+            const constraints = { 
+                video: { facingMode: "environment" } // Use back camera on mobile
+            };
+            
+            videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = videoStream;
+            
+            video.style.display = 'block';
+            document.getElementById('capturedImage').style.display = 'none';
+            document.getElementById('cameraControls').style.display = 'none';
+            document.getElementById('captureControls').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+
+        } catch (err) {
+            alert("Camera access denied or error: " + err.message);
+        }
+    }
+
+    function stopCamera() {
+        if (videoStream) {
+            videoStream.getTracks().forEach(track => track.stop());
+            videoStream = null;
+        }
+        document.getElementById('videoFeed').style.display = 'none';
+        document.getElementById('captureControls').style.display = 'none';
+        document.getElementById('cameraControls').style.display = 'block';
+    }
+
+    function capturePhoto() {
+        const video = document.getElementById('videoFeed');
+        const canvas = document.getElementById('canvas');
+        const img = document.getElementById('capturedImage');
+        
+        // Set canvas size to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw video frame to canvas
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert to image
+        img.src = canvas.toDataURL('image/png');
+        
+        // UI Switch
+        stopCamera();
+        img.style.display = 'block';
+        document.getElementById('processControls').style.display = 'block';
+    }
+
+    function handleFile(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById('capturedImage');
+                img.src = e.target.result;
+                img.style.display = 'block';
+                document.getElementById('processControls').style.display = 'block';
+                document.getElementById('cameraControls').style.display = 'none';
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function resetScanner() {
+        document.getElementById('capturedImage').style.display = 'none';
+        document.getElementById('processControls').style.display = 'none';
+        document.getElementById('cameraControls').style.display = 'block';
+        document.getElementById('results').style.display = 'none';
+        document.getElementById('fileUpload').value = '';
+    }
+
+    // --- PROCESSING & RESULT ---
+    function processResult() {
+        // Check if key is set
+        const isKeySet = answerKey.some(k => k !== '');
+        if(!isKeySet) {
+            alert("Please set the Answer Key first in the Setup tab!");
+            switchTab('setup');
+            return;
+        }
+
+        // Show Loader
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('statusText').style.display = 'block';
+        document.getElementById('processControls').style.display = 'none';
+
+        // Simulate OCR Delay
+        setTimeout(() => {
+            simulateOCR();
+            calculateResults();
+            
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('statusText').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+        }, 1500);
+    }
+
+    function simulateOCR() {
+        // Generates random answers for demo purposes
+        const options = ['A', 'B', 'C', 'D'];
+        for(let i=0; i<totalQuestions; i++) {
+            // 70% chance of being correct to make it look realistic
+            if(Math.random() > 0.3) {
+                studentAnswers[i] = answerKey[i];
+            } else {
+                studentAnswers[i] = options[Math.floor(Math.random() * options.length)];
+            }
+        }
+    }
+
+    function calculateResults() {
+        let correct = 0;
+        let wrong = 0;
+        const tbody = document.getElementById('resultBody');
+        tbody.innerHTML = '';
+
+        for(let i=0; i<totalQuestions; i++) {
+            const k = answerKey[i];
+            const s = studentAnswers[i];
+            let status = '';
+            let color = '';
+
+            if(k === s) {
+                correct++;
+                status = '✅ Correct';
+                color = 'green';
+            } else {
+                wrong++;
+                status = '❌ Wrong';
+                color = 'red';
+            }
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${i+1}</td>
+                <td><strong>${k}</strong></td>
+                <td>${s}</td>
+                <td style="color:${color}">${status}</td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // Update Stats
+        document.getElementById('resCorrect').innerText = correct;
+        document.getElementById('resWrong').innerText = wrong;
+        document.getElementById('resScore').innerText = `${correct}/${totalQuestions}`;
+        document.getElementById('resPercent').innerText = ((correct/totalQuestions)*100).toFixed(1) + '%';
+    }
+
+</script>
+
+</body>
+</html>
